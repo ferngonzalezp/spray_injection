@@ -14,6 +14,11 @@ def weights_init(m):
     elif classname.find('Conv') != -1:
         nn.init.kaiming_normal_(m.weight.data,0,mode='fan_out')
 
+def moments(x):
+  mu, std = (x.mean(0), x.std(0))
+  bs = x.shape[0]
+  return torch.cat([mu, std, torch.sum(((x-mu)*1/std)**3,dim=0)/bs, torch.sum(((x-mu)*1/std)**4,dim=0)/bs], dim=0)
+
 def calc_gradient_penalty(netD, real_data, generated_data,l = 10):
     # GP strengt
     LAMBDA = l
@@ -67,8 +72,7 @@ class discriminator(nn.Module):
     self.discriminator = nn.Sequential(*mlp(hparams.n_layers,
                                             hparams.n_neurons,
                                             hparams.output_dim,
-                                            1))
-  
+                                            1))  
   def forward(self,x):
       return self.discriminator(x)
   
@@ -128,7 +132,7 @@ class spray_injection(pl.LightningModule):
       self.log('disc_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
       return loss
     if optimizer_idx==1:
-      loss = -torch.mean(self.discriminator(x))
+      loss = -torch.mean(self.discriminator(x)) + F.mse_loss(moments(x), moments(y))
       self.log('gen_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
       return loss
 
