@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import matplotlib
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -142,7 +143,92 @@ class spray_injection(pl.LightningModule):
     x = self(z)
     loss = torch.abs(self.loss(self.discriminator(x),self.discriminator(y)))
     self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-    return loss 
+    return loss
+
+  def test_step(self,batch,batch_idx):
+    y = batch
+    z = torch.randn((y.shape[0],self.hparams.latent_dim)).type_as(y)
+    x = self(z)
+    loss = torch.abs(self.loss(self.discriminator(x),self.discriminator(y)))
+    self.log('test_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+    return y, x
+  
+  def test_epoch_end(self, outputs):
+    real, gen = outputs[:]
+    real = torch.cat(real,dim=0)
+    gen = torch.cat(gen,dim=0)
+    bins = np.linspace(0,1,100)
+
+    plt.title('PDF of droplet diameter')
+    plt.hist(bins=bins,x=gen[:,3].cpu(), label='Generated', density=True)
+    plt.hist(bins=bins,x=real[:,3].cpu(), label='source', density=True, histtype='step', linewidth=3, color='r')
+    plt.xlabel('diameter')
+    plt.ylabel('p')
+    plt.legend()
+    plt.savefig('pdf_d.pdf')
+
+    plt.figure(figsize=(15,5))
+    plt.subplot(1,3,1)
+    plt.title('PDF of U')
+    plt.hist(bins=bins,x=gen[:,4].cpu(), label='Generated', density=True)
+    plt.hist(bins=bins,x=real[:,4], label='source', density=True, histtype='step', linewidth=3, color='r')
+    plt.xlabel('U')
+    plt.ylabel('p')
+    plt.legend()
+    plt.subplot(1,3,2)
+    plt.title('PDF of V')
+    plt.hist(bins=bins,x=gen[:,5].cpu(), label='Generated', density=True)
+    plt.hist(bins=bins,x=real[:,5], label='source', density=True, histtype='step', linewidth=3, color='r')
+    plt.xlabel('V')
+    plt.ylabel('p')
+    plt.legend()
+    plt.subplot(1,3,3)
+    plt.title('PDF of W')
+    plt.hist(bins=bins,x=gen[:,6].cpu(), label='Generated', density=True)
+    plt.hist(bins=bins,x=real[:,6], label='source', density=True, histtype='step', linewidth=3, color='r')
+    plt.xlabel('W')
+    plt.ylabel('p')
+    plt.legend()
+    plt.savefig('pdf_uvw.pdf')
+
+    fig, ax = plt.subplots(1, 3, figsize=(17, 6), sharex=True, sharey=True,
+                        tight_layout=False)
+    cmap = 'jet'
+    ax[0].hist2d(x=spray_real[:,3].numpy(), y=spray_real[:,4].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[0].set_xlabel('d')
+    ax[0].set_ylabel('U')
+    ax[1].hist2d(x=spray_real[:,3].numpy(), y=spray_real[:,5].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[1].set_xlabel('d')
+    ax[1].set_ylabel('V')
+    ax[2].hist2d(x=spray_real[:,3].numpy(), y=spray_real[:,6].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[2].set_xlabel('d')
+    ax[2].set_ylabel('W')
+    ax[0].set_title('joint pdf p(d,U)')
+    ax[1].set_title('joint pdf p(d,V)')
+    ax[2].set_title('joint pdf p(d,W)')
+    fig.suptitle('diameter-velocity histograms for source data', fontsize=16)
+    fig.colorbar(matplotlib.cm.ScalarMappable(cmap=cmap), ax=ax)
+    fig.savefig('pdf_duvw_src.pdf')
+
+    fig, ax = plt.subplots(1, 3, figsize=(17, 6), sharex=True, sharey=True,
+                        tight_layout=False)
+    cmap = 'jet'
+    ax[0].hist2d(x=gen_spray[:,3].cpu().numpy(), y=gen_spray[:,4].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[0].set_xlabel('d')
+    ax[0].set_ylabel('U')
+    ax[1].hist2d(x=gen_spray[:,3].cpu().numpy(), y=gen_spray[:,5].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[1].set_xlabel('d')
+    ax[1].set_ylabel('V')
+    ax[2].hist2d(x=gen_spray[:,3].cpu().numpy(), y=gen_spray[:,6].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[2].set_xlabel('d')
+    ax[2].set_ylabel('W')
+    ax[0].set_title('joint pdf p(d,U)')
+    ax[1].set_title('joint pdf p(d,V)')
+    ax[2].set_title('joint pdf p(d,W)')
+    fig.suptitle('diameter-velocity histograms for generated data', fontsize=16)
+    fig.colorbar(matplotlib.cm.ScalarMappable(cmap=cmap), ax=ax)
+    fig.savefig('pdf_duvw_gen.pdf')
+
   
   def configure_optimizers(self):
       opt_G =  torch.optim.Adam(self.generator.parameters(), lr=self.hparams.lr, betas=(0,0.9))
