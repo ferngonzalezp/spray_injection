@@ -139,7 +139,7 @@ class spray_injection(pl.LightningModule):
 
   def validation_step(self,batch,batch_idx):
     y = batch
-    z = torch.randn((y.shape[0],self.hparams.latent_dim)).type_as(y)
+    z = self.pz.sample(torch.Size([y.shape[0],self.hparams.latent_dim])).squeeze(-1).type_as(y)
     x = self(z)
     loss = torch.abs(self.loss(self.discriminator(x),self.discriminator(y)))
     self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -147,16 +147,15 @@ class spray_injection(pl.LightningModule):
 
   def test_step(self,batch,batch_idx):
     y = batch
-    z = torch.randn((y.shape[0],self.hparams.latent_dim)).type_as(y)
+    z = self.pz.sample(torch.Size([y.shape[0],self.hparams.latent_dim])).squeeze(-1).type_as(y)
     x = self(z)
     loss = torch.abs(self.loss(self.discriminator(x),self.discriminator(y)))
     self.log('test_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-    return y, x
   
   def test_epoch_end(self, outputs):
-    real, gen = outputs[:]
-    real = torch.cat(real,dim=0)
-    gen = torch.cat(gen,dim=0)
+    real = torch.load(self.hparams.data_path+'test_data.pt').to(self.device)
+    z = self.pz.sample(torch.Size([10000,self.hparams.latent_dim])).squeeze(-1).type_as(real)
+    gen = self(z)
     bins = np.linspace(0,1,100)
 
     plt.title('PDF of droplet diameter')
@@ -194,13 +193,13 @@ class spray_injection(pl.LightningModule):
     fig, ax = plt.subplots(1, 3, figsize=(17, 6), sharex=True, sharey=True,
                         tight_layout=False)
     cmap = 'jet'
-    ax[0].hist2d(x=spray_real[:,3].numpy(), y=spray_real[:,4].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[0].hist2d(x=real[:,3].numpy(), y=real[:,4].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
     ax[0].set_xlabel('d')
     ax[0].set_ylabel('U')
-    ax[1].hist2d(x=spray_real[:,3].numpy(), y=spray_real[:,5].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[1].hist2d(x=real[:,3].numpy(), y=real[:,5].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
     ax[1].set_xlabel('d')
     ax[1].set_ylabel('V')
-    ax[2].hist2d(x=spray_real[:,3].numpy(), y=spray_real[:,6].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[2].hist2d(x=real[:,3].numpy(), y=real[:,6].numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
     ax[2].set_xlabel('d')
     ax[2].set_ylabel('W')
     ax[0].set_title('joint pdf p(d,U)')
@@ -213,13 +212,13 @@ class spray_injection(pl.LightningModule):
     fig, ax = plt.subplots(1, 3, figsize=(17, 6), sharex=True, sharey=True,
                         tight_layout=False)
     cmap = 'jet'
-    ax[0].hist2d(x=gen_spray[:,3].cpu().numpy(), y=gen_spray[:,4].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[0].hist2d(x=gen[:,3].cpu().numpy(), y=gen[:,4].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
     ax[0].set_xlabel('d')
     ax[0].set_ylabel('U')
-    ax[1].hist2d(x=gen_spray[:,3].cpu().numpy(), y=gen_spray[:,5].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[1].hist2d(x=gen[:,3].cpu().numpy(), y=gen[:,5].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
     ax[1].set_xlabel('d')
     ax[1].set_ylabel('V')
-    ax[2].hist2d(x=gen_spray[:,3].cpu().numpy(), y=gen_spray[:,6].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
+    ax[2].hist2d(x=gen[:,3].cpu().numpy(), y=gen[:,6].cpu().numpy(), bins=100, density=True, range=[[0,1],[0,1]], cmap=cmap)
     ax[2].set_xlabel('d')
     ax[2].set_ylabel('W')
     ax[0].set_title('joint pdf p(d,U)')
